@@ -19,7 +19,7 @@ func main() {
 	flag.Parse()
 
 	out := midi.GetOutPorts()
-	outDevices := strings.Split(out.String(), "\n")
+	outDevices := strings.Split(strings.Trim(out.String(), "\n"), "\n")
 	if len(outDevices) == 0 {
 		log.Fatal("no MIDI output device found")
 	}
@@ -38,12 +38,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	pc, err := net.ListenPacket("udp", ":1053")
+	pc, err := net.ListenPacket("udp", "0.0.0.0:1053")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer pc.Close()
 
+	fmt.Println("+ redirecting playback to", outDev)
 	playback(pc, outDev)
 }
 
