@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	in := midi.GetInPorts()
-	inDevices := strings.Split(in.String(), "\n")
+	inDevices := strings.Split(strings.Trim(in.String(), "\n"), "\n")
 	if len(inDevices) == 0 {
 		log.Fatal("no MIDI input device found")
 	}
@@ -41,7 +41,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	udpServer, err := net.ResolveUDPAddr("udp", ":1053")
+	udpServer, err := net.ResolveUDPAddr("udp", "debug.poolp.org:1053")
 	if err != nil {
 		println("ResolveUDPAddr failed:", err.Error())
 		os.Exit(1)
