@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"strings"
 
 	"gitlab.com/gomidi/midi/v2"
@@ -12,27 +13,10 @@ import (
 )
 
 func main() {
-	var inPort int
 	var outPort int
 
-	flag.IntVar(&inPort, "in", -1, "input device")
 	flag.IntVar(&outPort, "out", -1, "output device")
 	flag.Parse()
-
-	in := midi.GetInPorts()
-	inDevices := strings.Split(in.String(), "\n")
-	if len(inDevices) == 0 {
-		log.Fatal("no MIDI input device found")
-	}
-
-	if len(inDevices) != 1 && inPort == -1 {
-		fmt.Println(in.String())
-		log.Fatal("multiple MIDI input devices found, use `-in` to select")
-	}
-
-	if inPort == -1 {
-		inPort = 0
-	}
 
 	out := midi.GetOutPorts()
 	outDevices := strings.Split(out.String(), "\n")
@@ -49,30 +33,34 @@ func main() {
 		outPort = 0
 	}
 
-	var inDev drivers.In
-	var err error
-	inDev, err = midi.InPort(inPort)
+	outDev, err := midi.OutPort(outPort)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var outDev drivers.Out
-	outDev, err = midi.OutPort(outPort)
+	pc, err := net.ListenPacket("udp", ":1053")
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer pc.Close()
 
-	analyze(inDev, outDev)
+	playback(pc, outDev)
 }
 
-func analyze(in drivers.In, out drivers.Out) {
+func playback(pc net.PacketConn, out drivers.Out) {
 	var channel uint8
 	var key uint8
 	var velocity uint8
 
-	stop := make(chan bool, 0)
-	_, err := midi.ListenTo(in, func(msg midi.Message, absms int32) {
-		out.Send(msg.Bytes())
+	for {
+		buf := make([]byte, 1024)
+		n, _, err := pc.ReadFrom(buf)
+		if err != nil {
+			continue
+		}
+
+		var msg midi.Message = buf[:n]
+
 		switch msg.Type() {
 		case midi.NoteOnMsg:
 			msg.GetNoteOn(&channel, &key, &velocity)
@@ -81,16 +69,40 @@ func analyze(in drivers.In, out drivers.Out) {
 			} else {
 				fmt.Println("NOTE ON", key)
 			}
+			out.Send(buf[:n])
 
 		case midi.NoteOffMsg:
 			fmt.Println("NOTE OFF")
+			out.Send(buf[:n])
+
 		default:
 			fmt.Println(msg)
 		}
-	})
-	if err != nil {
-
-		log.Fatal(err)
 	}
-	<-stop
+	/*
+		stop := make(chan bool, 0)
+		_, err := midi.ListenTo(in, func(msg midi.Message, absms int32) {
+			out.Send(msg.Bytes())
+			switch msg.Type() {
+			case midi.NoteOnMsg:
+				msg.GetNoteOn(&channel, &key, &velocity)
+				if velocity == 0 {
+					fmt.Println("NOTE OFF", key)
+				} else {
+					fmt.Println("NOTE ON", key)
+				}
+
+			case midi.NoteOffMsg:
+				fmt.Println("NOTE OFF")
+			default:
+				fmt.Println(msg)
+			}
+		})
+		if err != nil {
+
+			log.Fatal(err)
+		}
+		<-stop
+	*/
+	//	}
 }
